@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -22,7 +22,7 @@ def _add_event(
 ) -> None:
     e = Event()
     e.add("uid", uid or str(uuid4()))
-    e.add("dtstamp", datetime.utcnow())
+    e.add("dtstamp", datetime.now(timezone.utc))
     e.add("dtstart", dt.date() if hasattr(dt, "date") else dt)
     e.add("summary", summary)
     if description:

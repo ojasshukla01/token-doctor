@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from token_doctor.core.schema import NormalizedEvent
@@ -74,7 +74,7 @@ def upsert_events(db_path: Path, events: list[NormalizedEvent]) -> int:
     """Insert or replace events; update fetch_meta. Returns count written."""
     import sqlite3
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     conn = sqlite3.connect(db_path)
     written = 0
     try:

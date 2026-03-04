@@ -1,6 +1,6 @@
 """Tests for ICS calendar generation: deterministic and valid."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from token_doctor.core.calendar import events_to_ics, report_to_ics
 from token_doctor.core.schema import (
@@ -50,7 +50,7 @@ def test_events_to_ics_valid():
 def test_report_to_ics():
     report = PlatformReport(
         platform="test",
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(timezone.utc),
         events=_sample_events(),
         token_metadata={},
     )

@@ -1,6 +1,6 @@
 """Tests for normalized event schema validation."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from token_doctor.core.schema import (
     CheckResult,
@@ -19,8 +19,8 @@ def test_normalized_event_conforms():
         title="Test",
         description="Desc",
         url="https://x.com",
-        published_at=datetime.utcnow(),
-        effective_date=datetime.utcnow(),
+        published_at=datetime.now(timezone.utc),
+        effective_date=datetime.now(timezone.utc),
         confidence=ConfidenceLevel.HIGH,
         source_type="rss",
         raw_id="id-1",
@@ -45,7 +45,7 @@ def test_check_result():
 def test_platform_report():
     report = PlatformReport(
         platform="github",
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(timezone.utc),
         events=[],
         token_checks=[],
         token_metadata={"fingerprint": "abc"},

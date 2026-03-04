@@ -264,7 +264,7 @@ def changes_fetch(
     platform: Annotated[str, typer.Argument(help="Platform name or 'all'.")],
 ) -> None:
     """Fetch change feeds and store in SQLite cache."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     from token_doctor.core.cache import get_last_fetch, init_db, upsert_events
 
@@ -282,7 +282,7 @@ def changes_fetch(
             continue
         since = get_last_fetch(config.effective_db_path, p)
         if not since:
-            since = datetime.utcnow() - timedelta(days=365)
+            since = datetime.now(timezone.utc) - timedelta(days=365)
         events = plugins[p].collect_changes(since)
         n = upsert_events(config.effective_db_path, events)
         typer.echo(f"  {p}: stored {n} events.")
@@ -298,7 +298,7 @@ def report(
     ] = None,
 ) -> None:
     """Generate Markdown and JSON report."""
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from token_doctor.core.cache import get_events, init_db
     from token_doctor.core.jwt_utils import get_jwt_expiry
@@ -330,7 +330,7 @@ def report(
             token_checks = plugins[p].token_checks(tok, config)
         report_obj = PlatformReport(
             platform=p,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
             events=events,
             token_checks=token_checks,
             token_metadata=token_metadata,
@@ -353,7 +353,7 @@ def calendar_export(
     ],
 ) -> None:
     """Export ICS for sunsets, deadlines, maintenance, token expiry."""
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from token_doctor.core.cache import get_events, init_db
     from token_doctor.core.calendar import export_ics
@@ -381,7 +381,7 @@ def calendar_export(
                 token_metadata["expires_at"] = exp
         report_obj = PlatformReport(
             platform=p,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
             events=events,
             token_checks=[],
             token_metadata=token_metadata,
@@ -423,7 +423,7 @@ def safe_share(
 ) -> None:
     """Export sanitized diagnostics bundle (no secrets)."""
     import json
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from token_doctor.core.cache import get_events, init_db
     from token_doctor.core.redaction import redact_dict
@@ -443,7 +443,7 @@ def safe_share(
         "no_secrets": True,
     }
     bundle = {
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "platform": platform,
         "config": config_safe,
         "plugin_metadata": meta,
