@@ -1902,4 +1902,4 @@ scrape = ["beautifulsoup4"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "44215b80e41b65c992eb173c22a1e67b4afce5b72720ef12c8164b5a53ac9c4c"
+content-hash = "832c404f81eef0709e144e603db36ea806bb2ee5bcc5130204bd0e981697778e"
