@@ -36,6 +36,6 @@ def get_jwt_expiry(token: str) -> datetime | None:
     exp = payload.get("exp")
     if exp is None:
         return None
-    if isinstance(exp, (int, float)):
+    if isinstance(exp, int | float):
         return datetime.utcfromtimestamp(exp)
     return None
