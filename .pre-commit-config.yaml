@@ -1,0 +1,48 @@
+# Pre-commit: prevent committing tokens and enforce code quality
+# Install: pre-commit install
+# Run: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-json
+      - id: check-yaml
+      - id: detect-private-key
+      - id: detect-aws-credentials
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: ^tests/|\.secrets\.baseline
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  - repo: local
+    hooks:
+      - id: no-raw-tokens
+        name: Block likely tokens in staged files
+        entry: python -c "
+import re, sys
+from pathlib import Path
+patterns = [
+    (r'ghp_[A-Za-z0-9]{36,}', 'GitHub PAT'),
+    (r'eyJ[A-Za-z0-9_-]{20,}\\.eyJ', 'JWT'),
+]
+for f in sys.argv[1:]:
+    p = Path(f)
+    if not p.exists() or p.suffix not in ('.py', '.json', '.yml', '.yaml', '.md', '.toml'): continue
+    t = p.read_text(errors='ignore')
+    for pat, name in patterns:
+        if re.search(pat, t):
+            print(f'{f}: possible {name} detected')
+            sys.exit(1)
+"
+        language: system
+        pass_filenames: true
