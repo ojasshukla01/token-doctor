@@ -1,0 +1,6 @@
+# Use in-project venv to avoid Windows path length limits (e.g. icalendar install).
+# If install still uses the cache path: run "poetry config virtualenvs.in-project true --local",
+# then delete the cache venv folder (see docs/TROUBLESHOOTING.md) and run "poetry install" again.
+[virtualenvs]
+create = true
+in-project = true

@@ -94,6 +94,41 @@ If you use JWTs, run `token-doctor token info <platform>` to see expiry (if pres
 
 ---
 
+## Windows: Poetry install fails (icalendar / FileNotFoundError)
+
+**Symptom:** `poetry install` fails with `FileNotFoundError` when installing `icalendar`, often mentioning a long path like `...\icalendar\tests\test_issue_322_single_strings_characters_split_into_multiple_categories.py`.
+
+**Cause:** On Windows, the default Poetry virtualenv path (in the user cache) plus long package filenames can exceed the 260-character path limit. Poetry may also keep using the cached venv even after `poetry.toml` is set to use an in-project venv.
+
+**What to do:**
+
+1. **Force in-project venv and remove old envs** (run from the project root):
+
+   ```powershell
+   cd "C:\path\to\token-doctor"
+   python -m poetry config virtualenvs.in-project true --local
+   python -m poetry env remove --all
+   ```
+
+2. **Delete the cached virtualenv folder** so Poetry doesn’t reuse it. The path is under your Poetry cache; for Windows Store Python it often looks like:
+
+   ```powershell
+   $cache = "$env:LOCALAPPDATA\Packages\PythonSoftwareFoundation.Python.3.10_qbz5n2kfra8p0\LocalCache\Local\pypoetry\Cache\virtualenvs"
+   Get-ChildItem $cache -Filter "token-doctor-*" | Remove-Item -Recurse -Force
+   ```
+
+   (Adjust the `Python.3.10_...` segment if you use a different Python/Store version. You can run `poetry env info` to see the current venv path before removing it.)
+
+3. **Install again** — Poetry will create `.venv` inside the project (shorter path):
+
+   ```powershell
+   python -m poetry install --no-interaction
+   ```
+
+   After this, the virtualenv will be at `<project>\\.venv`, which avoids the path length limit.
+
+---
+
 ## Need more help?
 
 - Open an issue on GitHub with the command you ran, the full error message (redact any secrets), and your OS/Python version.
