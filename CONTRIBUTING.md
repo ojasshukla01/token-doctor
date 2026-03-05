@@ -35,6 +35,8 @@ When you add a new platform plugin, update **all** of the following so the app a
 
 - **`token_doctor/cli/tui.py`** — The `token-doctor ui` command uses this. If you add a new CLI feature that should appear in the interactive menu, add a corresponding option in `run_tui()` (main menu or submenus). The TUI invokes the same CLI via `CliRunner`, so no duplicate logic.
 
+- **`token_doctor/cli/textual_app.py`** — The **Textual TUI** (`token-doctor tui`) uses this. It shows a dashboard (status table, next deadlines, recent events) using core APIs only (config, cache, secrets). All `textual` imports stay in this module so the rest of the project runs without Textual. Optional dependency: install with `pip install -e '.[textual]'`.
+
 ### 6. Run checks
 
 After making changes:

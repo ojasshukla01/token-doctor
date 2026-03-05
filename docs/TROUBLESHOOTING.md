@@ -70,6 +70,33 @@ If you use JWTs, run `token-doctor token info <platform>` to see expiry (if pres
 
 ---
 
+## token-doctor tui fails / Textual not installed
+
+**Symptom:** Running `token-doctor tui` prints "Textual is not installed" and exits.
+
+**What to do:** Install the optional Textual extra:
+
+```bash
+pip install -e ".[textual]"
+# or with Poetry:
+poetry install --extras textual
+```
+
+Then run `token-doctor tui` again. The dashboard shows status per platform, next deadlines, and recent events; press **r** to refresh, **q** to quit.
+
+---
+
+## token-doctor tui shows a black screen (Windows)
+
+**Symptom:** `token-doctor tui` starts but the screen stays black and nothing is visible.
+
+**What to do:**
+- **Use Windows Terminal** instead of classic Command Prompt (cmd.exe). Windows Terminal handles colors and the TUI buffer better: install from the Microsoft Store or [GitHub](https://github.com/microsoft/terminal/releases).
+- Run from the project directory: `python -m token_doctor.cli.main tui`
+- If it still stays black, try in PowerShell or in a new Windows Terminal tab. Some consoles clear to black and don’t repaint until the app explicitly sets a background; the app uses a dark theme so you should see a dark gray/blue background and light text once it draws.
+
+---
+
 ## Certificate verify failed / SSL errors
 
 **Symptom:** Live link tests or fetch fails with SSL/certificate errors (e.g. in CI or corporate proxy).

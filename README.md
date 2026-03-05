@@ -57,6 +57,16 @@ token-doctor ui
 
 Then use the numbered menu (dashboard, profiles, tokens, fetch, report, calendar, expiring, doctor run, safe-share). No need to type individual commands.
 
+**Textual TUI dashboard (optional):**
+
+```bash
+pip install -e ".[textual]"   # one-time: install Textual extra
+token-doctor tui
+# or: python -m token_doctor.cli.main tui
+```
+
+Starts with the **same main menu as `ui`**: Dashboard, Status, Profiles, Tokens, Fetch changes, Report, Calendar export, Expiring tokens, Doctor run, Safe-share. Choose an option (e.g. **1** for Dashboard) to open the dashboard or run that command and see output. From the dashboard press **m** for Menu, **r** to refresh, **q** to quit. If Textual is not installed, `token-doctor tui` prints install instructions and exits.
+
 **Daily use (CLI):**
 
 ```bash
@@ -104,12 +114,15 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues (keycha
 | **`changes fetch <platform\|all>`** | Fetches changelog/feed data for the platform(s) and stores events in the local SQLite cache. |
 | **`report <platform\|all>`** | Generates Markdown and JSON reports from cached events (and token metadata where applicable) into the config reports directory. |
 | **`calendar export <platform\|all> [-o FILE]`** | Exports an ICS file with events (sunsets, deadlines, maintenance, token expiry). Default file: `token-doctor.ics`; use `-o FILE` to override. |
-| **`status`** | One-screen summary: token status per profile, event counts, next deadline. |
+| **`status`** | One-screen summary: token status per profile, event counts, next deadline. Shows **alerts** at 30/15/7/1 days before token expiry or sunset; prompts to export calendar for reminders. |
 | **`dashboard`** | Status plus recent changelog (mini status page). |
-| **`expiring [--days N]`** | List tokens that expire within N days (default 7). |
+| **`expiring [--days N]`** | List tokens that expire within N days (default 7; JWT only). In the TUI you can choose 7, 15, or 30 days. |
 | **`doctor run <platform\|all>`** | One-shot: token check, changes fetch, report, calendar. Use `--ci` to exit 2 if critical sunset &lt; 30 days; `--watch N` to run every N seconds; `--notify` to echo alerts. |
 | **`safe-share <platform> [-o PATH]`** | Exports a sanitized diagnostics bundle (no secrets) for sharing or support; path defaults to `token-doctor-safe-share`. |
 | **`ui`** | **Interactive menu** — run all of the above from one place: dashboard, profiles, tokens, fetch, report, calendar, expiring, doctor run, safe-share. One command, then navigate with numbered options. |
+| **`tui`** | **Textual TUI** — same menu as `ui`. Dashboard shows **alerts** (30/15/7/1 day token/sunset reminders). **e** = Export calendar, **m** = Menu, **r** = refresh, **q** = quit. Requires: `pip install -e '.[textual]'`. |
+
+**Alerts and sunset version:** The app checks for token expiry and sunset/deprecation events at **30, 15, 7, and 1 day(s)** before. When you run `status` (or open the TUI dashboard), you’ll see these alerts and can export a calendar (ICS) for reminders. To get sunset alerts only for the API version you use, set **`api_version`** (or **`version`**) in the profile options (e.g. in `config.json`: `"options": {"api_version": "2023-01"}` for that platform). Sunset events whose title or description matches that version will then trigger alerts.
 
 **Global flags:**
 
@@ -126,8 +139,21 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues (keycha
 **Dependencies (see `pyproject.toml`):**
 
 - **Runtime:** typer, click (pinned &lt;8.2 for Typer 0.12 compatibility), httpx, feedparser, keyring, icalendar, pydantic
-- **Optional extras:** `pip install -e ".[rich]"` for Rich tables/panels; `pip install -e ".[scrape]"` for BeautifulSoup scraping
+- **Optional extras:** `pip install -e ".[rich]"` for Rich tables/panels; `pip install -e ".[scrape]"` for BeautifulSoup scraping; `pip install -e ".[textual]"` for the Textual TUI dashboard (`token-doctor tui`)
 - **Dev:** pytest, ruff, mypy, pre-commit, respx, detect-secrets (see `[tool.poetry.group.dev.dependencies]`)
+
+| Package     | Purpose |
+|------------|---------|
+| **typer**  | CLI framework; `typer.testing.CliRunner` used by `ui` and TUI menu to run commands. |
+| **click**  | Required by Typer (version &lt;8.2 for Typer 0.12). |
+| **httpx**  | HTTP client for token checks and feed fetching (platforms). |
+| **feedparser** | RSS/Atom feed parsing for changelog sources. |
+| **keyring** | OS keychain for token storage; fallback to encrypted file if unavailable. |
+| **icalendar** | ICS calendar export (sunsets, deadlines, token expiry). |
+| **pydantic** | Config and profile models. |
+| **rich** (optional) | Prettier tables in terminal. |
+| **textual** (optional) | TUI dashboard (`token-doctor tui`). |
+| **beautifulsoup4** (optional) | Scraping extra for HTML sources. |
 - **Windows:** `poetry.toml` sets in-project venv (`virtualenvs.in-project = true`) to avoid path-length issues with icalendar. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) if install fails.
 
 ---

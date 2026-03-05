@@ -286,3 +286,25 @@ def test_doctor_run_ci_exits_zero_when_no_critical(tmp_path):
         result = runner.invoke(app, ["doctor", "run", "github", "--ci"])
     # May exit 0 or 1 (token check fail); should not exit 2 (critical event) when cache is empty
     assert result.exit_code in (0, 1)
+
+
+def test_tui_exits_with_message_when_textual_not_installed():
+    """token-doctor tui exits 1 and prints install message when Textual is not available."""
+    import sys
+    import types
+
+    # Make "textual" appear missing so that token_doctor.cli.textual_app fails to load
+    fake_textual = types.ModuleType("textual")
+
+    def _getattr(name: str):
+        raise ImportError("No module named 'textual'")
+
+    fake_textual.__getattr__ = _getattr
+    with patch.dict("sys.modules", {"textual": fake_textual}):
+        if "token_doctor.cli.textual_app" in sys.modules:
+            del sys.modules["token_doctor.cli.textual_app"]
+        runner = CliRunner()
+        result = runner.invoke(app, ["tui"])
+    assert result.exit_code == 1
+    assert "Textual" in result.output or "textual" in result.output.lower()
+    assert "textual" in result.output.lower()

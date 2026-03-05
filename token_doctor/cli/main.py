@@ -93,6 +93,21 @@ def ui() -> None:
     run_tui(app)
 
 
+# --- tui (Textual dashboard) ---
+@app.command()
+def tui() -> None:
+    """Launch Textual TUI dashboard (status table, deadlines, recent events). Requires: pip install -e '.[textual]'."""
+    try:
+        from token_doctor.cli.textual_app import run_textual_app
+    except ImportError:
+        typer.echo(
+            "Textual is not installed. Install the textual extra:\n  pip install -e '.[textual]'",
+            err=True,
+        )
+        raise typer.Exit(1)
+    run_textual_app()
+
+
 # --- init ---
 @app.command()
 def init(
@@ -516,8 +531,11 @@ def calendar_export(
 @app.command()
 def status() -> None:
     """One-screen summary: token status per profile, event counts, next deadline."""
+    import sys
     from datetime import datetime, timezone
+    from pathlib import Path
 
+    from token_doctor.core.alerts import get_sunset_alerts, get_token_expiry_alerts
     from token_doctor.core.cache import get_event_counts, get_next_deadlines, init_db
     from token_doctor.core.jwt_utils import get_jwt_expiry
     from token_doctor.core.secrets import get_token
@@ -555,6 +573,21 @@ def status() -> None:
             ed = e.effective_date.date().isoformat() if e.effective_date else ""
             typer.echo(f"  {ed} [{e.platform}] {e.title[:50]}")
 
+    # Alerts at 30, 15, 7, 1 day(s) before token expiry or sunset
+    token_alerts = get_token_expiry_alerts(config, within_days=30)
+    sunset_alerts = get_sunset_alerts(config, config.effective_db_path, within_days=30)
+    if token_alerts or sunset_alerts:
+        typer.echo("")
+        typer.echo("Alerts (30 / 15 / 7 / 1 day reminder):")
+        for token_alert in token_alerts:
+            typer.echo(f"  [Token] {token_alert.platform}: expires in {token_alert.days_until} days ({token_alert.expires_at.date().isoformat()})")
+        for sunset_alert in sunset_alerts:
+            typer.echo(f"  [Sunset] {sunset_alert.platform}: {sunset_alert.title[:50]} (in {sunset_alert.days_until} days)")
+        if sys.stdin.isatty() and typer.confirm(
+            "Export calendar to get reminders in your calendar app?", default=False
+        ):
+            calendar_export("all", Path(config.config_dir / "token-doctor.ics"))
+
 # --- dashboard ---
 @app.command()
 def dashboard() -> None:
@@ -585,7 +618,7 @@ def dashboard() -> None:
 def expiring(
     days: Annotated[int, typer.Option("--days", "-d", help="Warn if token expires within this many days.")] = 7,
 ) -> None:
-    """List tokens that expire within the given days."""
+    """List tokens that expire within the given days (JWT exp claim only)."""
     from datetime import datetime, timezone
 
     from token_doctor.core.jwt_utils import get_jwt_expiry
@@ -593,7 +626,7 @@ def expiring(
 
     config = _get_config()
     now = datetime.now(timezone.utc)
-    found = []
+    found: list[tuple[str, datetime, int]] = []
     for p in config.profiles:
         if not p.enabled:
             continue
@@ -608,9 +641,11 @@ def expiring(
             found.append((p.platform, exp, delta))
     if not found:
         typer.echo(f"No tokens expiring within {days} days.")
+        typer.echo("(Only tokens with a JWT 'exp' claim are checked; other token types are skipped.)")
         return
+    typer.echo(f"Tokens expiring within {days} days:")
     for platform, exp, delta in found:
-        typer.echo(f"  {platform}: expires {exp.date().isoformat()} (in {delta} days)")
+        typer.echo(f"  {platform}: {exp.date().isoformat()} (in {delta} days)")
 
 # --- doctor run ---
 doctor_app = typer.Typer(help="One-shot run: token check, fetch changes, report, calendar.")
