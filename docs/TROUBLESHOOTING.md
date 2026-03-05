@@ -82,7 +82,7 @@ pip install -e ".[textual]"
 poetry install --extras textual
 ```
 
-Then run `token-doctor tui` again. The dashboard shows status per platform, next deadlines, and recent events; press **r** to refresh, **q** to quit.
+Then run `token-doctor tui` again. The dashboard shows status per platform, alerts, next deadlines, and recent events (sunset/deprecation events show their deadline date). Press **v** for All events (scrollable list), **e** to export calendar, **r** to refresh, **q** to quit.
 
 ---
 

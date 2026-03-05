@@ -65,7 +65,7 @@ token-doctor tui
 # or: python -m token_doctor.cli.main tui
 ```
 
-Starts with the **same main menu as `ui`**: Dashboard, Status, Profiles, Tokens, Fetch changes, Report, Calendar export, Expiring tokens, Doctor run, Safe-share. Choose an option (e.g. **1** for Dashboard) to open the dashboard or run that command and see output. From the dashboard press **m** for Menu, **r** to refresh, **q** to quit. If Textual is not installed, `token-doctor tui` prints install instructions and exits.
+Starts with the **same main menu as `ui`**: Dashboard, Status, Profiles, Tokens, Fetch changes, Report, Calendar export, Expiring tokens, Doctor run, Safe-share, **All events**. Choose an option (e.g. **1** for Dashboard, **11** for All events) or from the dashboard press **v** for All events (scrollable list of cached events with sunset/deprecation and version tags). From the dashboard press **e** to export calendar, **m** for Menu, **r** to refresh, **q** to quit. If Textual is not installed, `token-doctor tui` prints install instructions and exits.
 
 **Daily use (CLI):**
 
@@ -120,7 +120,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues (keycha
 | **`doctor run <platform\|all>`** | One-shot: token check, changes fetch, report, calendar. Use `--ci` to exit 2 if critical sunset &lt; 30 days; `--watch N` to run every N seconds; `--notify` to echo alerts. |
 | **`safe-share <platform> [-o PATH]`** | Exports a sanitized diagnostics bundle (no secrets) for sharing or support; path defaults to `token-doctor-safe-share`. |
 | **`ui`** | **Interactive menu** — run all of the above from one place: dashboard, profiles, tokens, fetch, report, calendar, expiring, doctor run, safe-share. One command, then navigate with numbered options. |
-| **`tui`** | **Textual TUI** — same menu as `ui`. Dashboard shows **alerts** (30/15/7/1 day token/sunset reminders). **e** = Export calendar, **m** = Menu, **r** = refresh, **q** = quit. Requires: `pip install -e '.[textual]'`. |
+| **`tui`** | **Textual TUI** — same menu as `ui`. Dashboard shows **alerts** (30/15/7/1 day token/sunset reminders) and recent events (sunset/deprecation show deadline). **e** = Export calendar, **v** = All events, **m** = Menu, **r** = refresh, **q** = quit. Menu option **11** = All events. Requires: `pip install -e '.[textual]'`. |
 
 **Alerts and sunset version:** The app checks for token expiry and sunset/deprecation events at **30, 15, 7, and 1 day(s)** before. When you run `status` (or open the TUI dashboard), you’ll see these alerts and can export a calendar (ICS) for reminders. To get sunset alerts only for the API version you use, set **`api_version`** (or **`version`**) in the profile options (e.g. in `config.json`: `"options": {"api_version": "2023-01"}` for that platform). Sunset events whose title or description matches that version will then trigger alerts.
 
@@ -140,7 +140,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues (keycha
 
 - **Runtime:** typer, click (pinned &lt;8.2 for Typer 0.12 compatibility), httpx, feedparser, keyring, icalendar, pydantic
 - **Optional extras:** `pip install -e ".[rich]"` for Rich tables/panels; `pip install -e ".[scrape]"` for BeautifulSoup scraping; `pip install -e ".[textual]"` for the Textual TUI dashboard (`token-doctor tui`)
-- **Dev:** pytest, ruff, mypy, pre-commit, respx, detect-secrets (see `[tool.poetry.group.dev.dependencies]`)
+- **Dev:** pytest, pytest-cov, pytest-mock, ruff, mypy, pre-commit, respx, detect-secrets (see `[tool.poetry.group.dev.dependencies]`). Use `poetry install` to install dev dependencies; with pip, install the package then add dev tools (e.g. `pip install pytest ruff mypy`) if needed.
 
 | Package     | Purpose |
 |------------|---------|
@@ -249,7 +249,8 @@ poetry run mypy token_doctor
 **Without Poetry** (use the same Python that has the project installed):
 
 ```bash
-pip install -e ".[dev]"
+pip install -e .
+pip install pytest pytest-cov pytest-mock ruff mypy respx  # dev tools
 pytest tests -v
 python -m ruff check token_doctor tests
 python -m mypy token_doctor

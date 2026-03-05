@@ -17,7 +17,7 @@
 
 - **redaction** module: All CLI output and exception messages that might contain user input or API responses are passed through redaction. Patterns: JWTs, Bearer tokens, GitHub-style PATs, long opaque tokens. Secret-like dict keys (e.g. `token`, `password`, `api_key`) are always replaced with a placeholder in serialized output.
 - **Safe-share:** The `safe-share` command exports only config (no secrets), plugin metadata, and event cache; no token or key material.
-- **Interactive UI:** The `ui` command runs the same CLI subcommands (e.g. `token set`, `token check`) via the same code paths; token handling and storage are unchanged. No tokens are logged or displayed in the TUI.
+- **Interactive UI:** The `ui` command runs the same CLI subcommands (e.g. `token set`, `token check`) via the same code paths; token handling and storage are unchanged. No tokens are logged or displayed in the TUI. The **tui** command (Textual dashboard) uses the same CLI and core APIs; tokens are not shown or logged there either.
 
 ## Pre-commit
 
