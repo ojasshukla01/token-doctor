@@ -6,7 +6,9 @@ from token_doctor.core.plugin_loader import (
     get_plugin_metadata,
 )
 
-# Minimum set of platforms that must be present (expanded A-Z + marketing)
+# Minimum set of platforms that must be present (expanded A-Z + marketing).
+# When adding a new platform: add it here, add PLATFORM_HINTS in token_doctor/cli/ux.py,
+# and update README + docs/sources.md. See CONTRIBUTING.md for the full checklist.
 EXPECTED_PLATFORMS = [
     "acxiom",
     "adobe",

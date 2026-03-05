@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, cast
 
 
@@ -37,5 +37,5 @@ def get_jwt_expiry(token: str) -> datetime | None:
     if exp is None:
         return None
     if isinstance(exp, int | float):
-        return datetime.utcfromtimestamp(exp)
+        return datetime.fromtimestamp(exp, tz=timezone.utc)
     return None

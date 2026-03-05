@@ -64,6 +64,20 @@ token-doctor calendar export github -o calendar.ics
 token-doctor doctor run github
 ```
 
+**Automation (scheduling):** Run regularly via cron or a task scheduler. Example (weekly, Monday 9:00):
+
+```bash
+0 9 * * 1 token-doctor doctor run all
+```
+
+Or run every hour with `--watch` (e.g. 3600 seconds):
+
+```bash
+token-doctor doctor run all --watch 3600
+```
+
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues (keychain, PATH, offline, etc.).
+
 ---
 
 ## Commands (what each one does)
@@ -81,7 +95,10 @@ token-doctor doctor run github
 | **`changes fetch <platform\|all>`** | Fetches changelog/feed data for the platform(s) and stores events in the local SQLite cache. |
 | **`report <platform\|all>`** | Generates Markdown and JSON reports from cached events (and token metadata where applicable) into the config reports directory. |
 | **`calendar export <platform\|all> [-o FILE]`** | Exports an ICS file with events (sunsets, deadlines, maintenance, token expiry). Default file: `token-doctor.ics`; use `-o FILE` to override. |
-| **`doctor run <platform\|all>`** | One-shot: runs token check, changes fetch, report, and calendar export for the platform(s). |
+| **`status`** | One-screen summary: token status per profile, event counts, next deadline. |
+| **`dashboard`** | Status plus recent changelog (mini status page). |
+| **`expiring [--days N]`** | List tokens that expire within N days (default 7). |
+| **`doctor run <platform\|all>`** | One-shot: token check, changes fetch, report, calendar. Use `--ci` to exit 2 if critical sunset &lt; 30 days; `--watch N` to run every N seconds; `--notify` to echo alerts. |
 | **`safe-share <platform> [-o PATH]`** | Exports a sanitized diagnostics bundle (no secrets) for sharing or support; path defaults to `token-doctor-safe-share`. |
 
 **Global flags:**
@@ -106,6 +123,8 @@ token-doctor doctor run github
 - **Database** — SQLite `cache.sqlite` under the config dir stores fetched events and timestamps.
 
 Tokens are stored in the OS keychain (macOS Keychain, Windows Credential Manager, or Linux Secret Service). An encrypted file fallback is used only if the keychain is unavailable (with a warning).
+
+**Adding a new platform?** Update the plugin, `EXPECTED_PLATFORMS` (tests), `PLATFORM_HINTS` (`token_doctor/cli/ux.py`), README, and `docs/sources.md`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full checklist; the test `test_platform_hints_cover_all_plugins` will fail until `PLATFORM_HINTS` is updated.
 
 ---
 
@@ -202,6 +221,7 @@ Tests cover plugin discovery, URL validity, smoke tests for every plugin, and **
 - [SECURITY.md](SECURITY.md) — Threat model, token handling, redaction.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — **We welcome contributions.** How to add plugins, run checks, and submit changes.
 - [docs/sources.md](docs/sources.md) — Monitored sources per platform.
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — Keychain, "Token invalid", PATH, offline, SSL, and more.
 
 ---
 

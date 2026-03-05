@@ -13,6 +13,13 @@ from typing import Annotated, Any, TypeVar
 
 import typer
 
+from token_doctor.cli.ux import (
+    echo_next_step_init,
+    echo_next_step_token_check_failed,
+    get_platform_hint,
+    suggest_platform,
+    try_rich_table,
+)
 from token_doctor.core.config import (
     TokenDoctorConfig,
     ensure_config_dir,
@@ -20,13 +27,18 @@ from token_doctor.core.config import (
     save_config,
 )
 from token_doctor.core.exceptions import TokenDoctorError
-from token_doctor.core.plugin_loader import get_all_plugins, get_plugin_metadata
+from token_doctor.core.plugin_loader import (
+    get_all_plugins,
+    get_plugin_metadata,
+    list_platform_names,
+)
 from token_doctor.core.redaction import redact_string
 from token_doctor.core.validation import validate_platform_name
 
 app = typer.Typer(
     name="token-doctor",
     help="Debug API tokens, track platform changes, generate calendar alerts.",
+    no_args_is_help=True,
 )
 
 GLOBAL_OFFLINE = False
@@ -95,6 +107,7 @@ def init(
     )
     typer.echo(f"Initialized config at {config.config_dir}")
     typer.echo(f"Database at {config.effective_db_path}")
+    echo_next_step_init()
 
 
 def _get_config() -> TokenDoctorConfig:
@@ -106,8 +119,9 @@ def _get_config() -> TokenDoctorConfig:
         raise typer.Exit(1)
 
 
-def _get_plugins() -> dict[str, Any]:
-    return get_all_plugins()
+def _get_plugins(platforms: list[str] | None = None) -> dict[str, Any]:
+    """Load plugins. If platforms is given, only those are loaded (lazy)."""
+    return get_all_plugins(only_platforms=platforms)
 
 
 # --- profile ---
@@ -128,12 +142,19 @@ def profile_add(
     config = _get_config()
     plugins = _get_plugins()
     if platform not in plugins:
-        available = ", ".join(sorted(plugins.keys()))
-        typer.echo(f"Unknown platform: {platform}. Available: {available}", err=True)
+        available = list_platform_names()
+        suggestion = suggest_platform(platform, available)
+        if suggestion:
+            typer.echo(f"Unknown platform: {platform}. Did you mean: {suggestion}?", err=True)
+        else:
+            typer.echo(f"Unknown platform: {platform}. Available: {', '.join(available)}", err=True)
         raise typer.Exit(1)
     config.add_profile(platform)
     save_config(config)
     typer.echo(f"Added profile: {platform}")
+    hint = get_platform_hint(platform)
+    if hint:
+        typer.echo(f"Tip: {hint}")
 
 
 @profile_app.command("list")
@@ -143,8 +164,10 @@ def profile_list() -> None:
     if not config.profiles:
         typer.echo("No profiles configured. Use: token-doctor profile add <platform>")
         return
-    for p in config.profiles:
-        typer.echo(f"  {p.platform} (enabled={p.enabled})")
+    rows = [[p.platform, "yes" if p.enabled else "no"] for p in config.profiles]
+    if not try_rich_table(["Platform", "Enabled"], rows):
+        for p in config.profiles:
+            typer.echo(f"  {p.platform} (enabled={p.enabled})")
 
 
 @profile_app.command("remove")
@@ -166,8 +189,14 @@ app.add_typer(token_app, name="token")
 @token_app.command("set")
 def token_set(
     platform: Annotated[str, typer.Argument(help="Platform name.")],
+    env: Annotated[
+        str | None,
+        typer.Option("--env", "-e", help="Read token from this environment variable (e.g. GITHUB_TOKEN)."),
+    ] = None,
 ) -> None:
-    """Store token in keychain (prompted interactively)."""
+    """Store token in keychain (prompted interactively or from --env)."""
+    import os
+
     from token_doctor.core.secrets import set_token
     from token_doctor.core.validation import validate_token_not_empty
 
@@ -178,10 +207,17 @@ def token_set(
         raise typer.Exit(1)
     config = _get_config()
     ensure_config_dir(config)
-    raw = typer.prompt("Token", hide_input=True)
-    if not raw:
-        typer.echo("Aborted.")
-        raise typer.Exit(1)
+    if env:
+        raw = os.environ.get(env)
+        if not raw:
+            typer.echo(f"Environment variable {env} is not set or empty.", err=True)
+            raise typer.Exit(1)
+    else:
+        typer.echo("Paste your token (input is hidden for security):", err=True)
+        raw = typer.prompt("Token", hide_input=True)
+        if not raw:
+            typer.echo("Aborted.")
+            raise typer.Exit(1)
     try:
         raw = validate_token_not_empty(raw)
     except TokenDoctorError as e:
@@ -205,15 +241,21 @@ def token_info(
     if not tok:
         typer.echo("No token stored for this platform.")
         return
-    typer.echo("Token exists: yes")
-    typer.echo(f"Fingerprint: {token_fingerprint(tok)}")
-    typer.echo(f"Last 4: {token_last_four(tok)}")
-    typer.echo("Detected type: JWT" if is_likely_jwt(tok) else "Detected type: API key / opaque")
+    rows = [
+        ["Property", "Value"],
+        ["Token exists", "yes"],
+        ["Fingerprint", token_fingerprint(tok)],
+        ["Last 4", token_last_four(tok)],
+        ["Detected type", "JWT" if is_likely_jwt(tok) else "API key / opaque"],
+    ]
     expiry = get_jwt_expiry(tok)
     if expiry:
-        typer.echo(f"Expiry (from JWT): {expiry.isoformat()}")
+        rows.append(["Expiry (from JWT)", expiry.isoformat()])
     else:
-        typer.echo("Expiry: not derivable locally")
+        rows.append(["Expiry", "not derivable locally"])
+    if not try_rich_table(["Property", "Value"], [[r[0], r[1]] for r in rows[1:]]):
+        for r in rows[1:]:
+            typer.echo(f"{r[0]}: {r[1]}")
 
 
 @token_app.command("delete")
@@ -233,17 +275,25 @@ def token_check(
     platform: Annotated[str, typer.Argument(help="Platform name.")],
 ) -> None:
     """Run plugin token validation checks. Output is always redacted."""
-    from token_doctor.core.redaction import redact_dict, redact_string
+    from token_doctor.core.jwt_utils import get_jwt_expiry
+    from token_doctor.core.redaction import is_likely_jwt, redact_dict, redact_string
+    from token_doctor.core.schema import CheckStatus
     from token_doctor.core.secrets import get_token
 
     config = _get_config()
-    plugins = _get_plugins()
+    plugins = _get_plugins([platform])
     if platform not in plugins:
-        typer.echo(f"Unknown platform: {platform}")
+        available = list_platform_names()
+        suggestion = suggest_platform(platform, available)
+        if suggestion:
+            typer.echo(f"Unknown platform: {platform}. Did you mean: {suggestion}?", err=True)
+        else:
+            typer.echo(f"Unknown platform: {platform}", err=True)
         raise typer.Exit(1)
     tok = get_token(platform, config.config_dir)
     if not tok:
         typer.echo("No token set. Use: token-doctor token set <platform>")
+        echo_next_step_token_check_failed(platform)
         raise typer.Exit(1)
     plug = plugins[platform]
     results = plug.token_checks(tok, config)
@@ -252,6 +302,12 @@ def token_check(
         typer.echo(f"  [{r.status.value}] {r.name}: {msg}")
         if r.details:
             typer.echo("    details: " + redact_string(str(redact_dict(r.details))))
+    all_ok = all(r.status == CheckStatus.OK for r in results) if results else False
+    if results and not all_ok:
+        echo_next_step_token_check_failed(platform)
+    # Security hints
+    if tok and is_likely_jwt(tok) and get_jwt_expiry(tok) is None:
+        typer.echo("  Tip: Token has no expiry in JWT; consider rotating periodically.")
 
 
 # --- changes ---
@@ -259,11 +315,31 @@ changes_app = typer.Typer(help="Fetch platform change feeds.")
 app.add_typer(changes_app, name="changes")
 
 
+def _fetch_one_platform(
+    platform: str,
+    plugins: dict[str, Any],
+    db_path: Path,
+) -> tuple[str, list[Any]]:
+    """Fetch changes for one platform. Returns (platform, events)."""
+    from datetime import datetime, timedelta, timezone
+
+    from token_doctor.core.cache import get_last_fetch
+    since = get_last_fetch(db_path, platform)
+    if not since:
+        since = datetime.now(timezone.utc) - timedelta(days=365)
+    plug = plugins.get(platform)
+    if not plug:
+        return platform, []
+    events = plug.collect_changes(since)
+    return platform, events
+
+
 @changes_app.command("fetch")
 def changes_fetch(
     platform: Annotated[str, typer.Argument(help="Platform name or 'all'.")],
 ) -> None:
     """Fetch change feeds and store in SQLite cache."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from datetime import datetime, timedelta, timezone
 
     from token_doctor.core.cache import get_last_fetch, init_db, upsert_events
@@ -274,18 +350,43 @@ def changes_fetch(
         return
     config = _get_config()
     init_db(config.effective_db_path)
-    plugins = _get_plugins()
-    targets = list(plugins.keys()) if platform == "all" else [platform]
-    for p in targets:
-        if p not in plugins:
-            typer.echo(f"Unknown platform: {p}")
-            continue
-        since = get_last_fetch(config.effective_db_path, p)
-        if not since:
-            since = datetime.now(timezone.utc) - timedelta(days=365)
-        events = plugins[p].collect_changes(since)
-        n = upsert_events(config.effective_db_path, events)
-        typer.echo(f"  {p}: stored {n} events.")
+    targets = list(get_all_plugins().keys()) if platform == "all" else [platform]
+    plugins = _get_plugins(targets)
+    if platform == "all" and len(targets) > 1:
+        total = len(targets)
+        completed = 0
+        with ThreadPoolExecutor(max_workers=min(8, total)) as executor:
+            futures = {
+                executor.submit(_fetch_one_platform, p, plugins, config.effective_db_path): p
+                for p in targets
+                if p in plugins
+            }
+            for fut in as_completed(futures):
+                completed += 1
+                p = futures[fut]
+                typer.echo(f"  Fetching {completed}/{total}: {p}...")
+                try:
+                    _p, events = fut.result()
+                    n = upsert_events(config.effective_db_path, events)
+                    typer.echo(f"  {_p}: stored {n} events.")
+                except Exception as e:
+                    typer.echo(f"  {p}: error - {redact_string(str(e))}", err=True)
+    else:
+        for p in targets:
+            if p not in plugins:
+                suggestion = suggest_platform(p, list_platform_names())
+                typer.echo(f"Unknown platform: {p}. Did you mean: {suggestion}?" if suggestion else f"Unknown platform: {p}", err=True)
+                continue
+            typer.echo(f"  Fetching {p}...", err=True)
+            since = get_last_fetch(config.effective_db_path, p)
+            if not since:
+                since = datetime.now(timezone.utc) - timedelta(days=365)
+            try:
+                events = plugins[p].collect_changes(since)
+                n = upsert_events(config.effective_db_path, events)
+                typer.echo(f"  {p}: stored {n} events.")
+            except Exception as e:
+                typer.echo(f"  {p}: error - {redact_string(str(e))}", err=True)
 
 
 # --- report ---
@@ -296,24 +397,29 @@ def report(
         Path | None,
         typer.Option("--output-dir", "-o", help="Output directory for reports."),
     ] = None,
+    format: Annotated[
+        str,
+        typer.Option("--format", "-f", help="Output format: md, json, or html (single file)."),
+    ] = "md",
 ) -> None:
-    """Generate Markdown and JSON report."""
+    """Generate Markdown, JSON, and/or HTML report."""
     from datetime import datetime, timezone
 
     from token_doctor.core.cache import get_events, init_db
     from token_doctor.core.jwt_utils import get_jwt_expiry
-    from token_doctor.core.reporting import write_reports
+    from token_doctor.core.reporting import report_to_html, write_reports
     from token_doctor.core.schema import PlatformReport
     from token_doctor.core.secrets import get_token
 
     config = _get_config()
     init_db(config.effective_db_path)
-    plugins = _get_plugins()
-    targets = list(plugins.keys()) if platform == "all" else [platform]
+    targets = list(get_all_plugins().keys()) if platform == "all" else [platform]
+    plugins = _get_plugins(targets)
     out_dir = output_dir or config.config_dir / "reports"
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     for p in targets:
         if p not in plugins:
-            typer.echo(f"Unknown platform: {p}")
             continue
         events = get_events(config.effective_db_path, platform=p)
         tok = get_token(p, config.config_dir)
@@ -335,8 +441,13 @@ def report(
             token_checks=token_checks,
             token_metadata=token_metadata,
         )
-        md_path, json_path = write_reports(report_obj, out_dir)
-        typer.echo(f"  {p}: {md_path}, {json_path}")
+        if format == "html":
+            html_path = out_dir / f"{p}.html"
+            html_path.write_text(report_to_html(report_obj), encoding="utf-8")
+            typer.echo(f"  {p}: {html_path}")
+        else:
+            md_path, json_path = write_reports(report_obj, out_dir)
+            typer.echo(f"  {p}: {md_path}, {json_path}")
 
 
 # --- calendar ---
@@ -363,8 +474,8 @@ def calendar_export(
 
     config = _get_config()
     init_db(config.effective_db_path)
-    plugins = _get_plugins()
-    targets = list(plugins.keys()) if platform == "all" else [platform]
+    targets = list(get_all_plugins().keys()) if platform == "all" else [platform]
+    plugins = _get_plugins(targets)
     reports = []
     for p in targets:
         if p not in plugins:
@@ -392,6 +503,106 @@ def calendar_export(
         typer.echo(f"Wrote {path}")
 
 
+# --- status ---
+@app.command()
+def status() -> None:
+    """One-screen summary: token status per profile, event counts, next deadline."""
+    from datetime import datetime, timezone
+
+    from token_doctor.core.cache import get_event_counts, get_next_deadlines, init_db
+    from token_doctor.core.jwt_utils import get_jwt_expiry
+    from token_doctor.core.secrets import get_token
+
+    config = _get_config()
+    init_db(config.effective_db_path)
+    counts = get_event_counts(config.effective_db_path)
+    deadlines = get_next_deadlines(config.effective_db_path, limit=5)
+    now = datetime.now(timezone.utc)
+    rows = []
+    for p in config.profiles:
+        if not p.enabled:
+            continue
+        tok = get_token(p.platform, config.config_dir)
+        if not tok:
+            status_str = "no token"
+        else:
+            exp = get_jwt_expiry(tok)
+            if exp:
+                delta = (exp - now).days
+                status_str = "ok" if delta > 7 else "expires soon" if delta > 0 else "expired"
+            else:
+                status_str = "ok (no expiry in JWT)"
+        n = counts.get(p.platform, 0)
+        rows.append([p.platform, status_str, str(n)])
+    if try_rich_table(["Platform", "Token", "Events"], rows):
+        pass
+    else:
+        for r in rows:
+            typer.echo(f"  {r[0]}: {r[1]} | {r[2]} events")
+    if deadlines:
+        typer.echo("")
+        typer.echo("Next deadlines:")
+        for e in deadlines:
+            ed = e.effective_date.date().isoformat() if e.effective_date else ""
+            typer.echo(f"  {ed} [{e.platform}] {e.title[:50]}")
+
+# --- dashboard ---
+@app.command()
+def dashboard() -> None:
+    """Status plus recent changelog (mini status page)."""
+    from datetime import datetime, timezone
+    status()
+    from token_doctor.core.cache import get_events, init_db
+    config = _get_config()
+    init_db(config.effective_db_path)
+    all_events: list[Any] = []
+    min_dt = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    for p in config.profiles:
+        if not p.enabled:
+            continue
+        events = get_events(config.effective_db_path, platform=p.platform)
+        for e in events:
+            all_events.append((e.platform, e))
+    all_events.sort(key=lambda x: (x[1].published_at or x[1].effective_date or min_dt), reverse=True)
+    typer.echo("")
+    typer.echo("Recent events (last 5):")
+    for platform, e in all_events[:5]:
+        pub = (e.published_at or e.effective_date)
+        pub_str = pub.isoformat()[:10] if pub else ""
+        typer.echo(f"  [{platform}] {pub_str} {e.title[:60]}")
+
+# --- expiring ---
+@app.command()
+def expiring(
+    days: Annotated[int, typer.Option("--days", "-d", help="Warn if token expires within this many days.")] = 7,
+) -> None:
+    """List tokens that expire within the given days."""
+    from datetime import datetime, timezone
+
+    from token_doctor.core.jwt_utils import get_jwt_expiry
+    from token_doctor.core.secrets import get_token
+
+    config = _get_config()
+    now = datetime.now(timezone.utc)
+    found = []
+    for p in config.profiles:
+        if not p.enabled:
+            continue
+        tok = get_token(p.platform, config.config_dir)
+        if not tok:
+            continue
+        exp = get_jwt_expiry(tok)
+        if not exp:
+            continue
+        delta = (exp - now).days
+        if delta <= days:
+            found.append((p.platform, exp, delta))
+    if not found:
+        typer.echo(f"No tokens expiring within {days} days.")
+        return
+    for platform, exp, delta in found:
+        typer.echo(f"  {platform}: expires {exp.date().isoformat()} (in {delta} days)")
+
 # --- doctor run ---
 doctor_app = typer.Typer(help="One-shot run: token check, fetch changes, report, calendar.")
 app.add_typer(doctor_app, name="doctor")
@@ -400,16 +611,70 @@ app.add_typer(doctor_app, name="doctor")
 @doctor_app.command("run")
 def doctor_run(
     platform: Annotated[str, typer.Argument(help="Platform or 'all'.")],
+    ci: Annotated[bool, typer.Option("--ci", help="Exit 2 if any token invalid or critical sunset < 30 days.")] = False,
+    watch: Annotated[
+        int | None,
+        typer.Option("--watch", "-w", help="Run repeatedly every N seconds (e.g. 3600 for hourly)."),
+    ] = None,
+    notify: Annotated[bool, typer.Option("--notify", help="Echo alerts for expiring tokens or critical events.")] = False,
 ) -> None:
     """Run token check, changes fetch, report generation, calendar export."""
-    plugins = _get_plugins()
-    targets = list(plugins.keys()) if platform == "all" else [platform]
-    for p in targets:
-        if p in plugins:
-            token_check(p)
-    changes_fetch(platform)
-    report(platform)
-    calendar_export(platform, Path("token-doctor.ics"))
+    import time
+    from datetime import datetime, timezone
+
+    from token_doctor.core.cache import get_next_deadlines, init_db
+    from token_doctor.core.schema import EventType
+
+    def run_once() -> bool:
+        targets = list(get_all_plugins().keys()) if platform == "all" else [platform]
+        plugins = _get_plugins(targets)
+        for p in targets:
+            if p in plugins:
+                token_check(p)
+        changes_fetch(platform)
+        report(platform)
+        calendar_export(platform, Path("token-doctor.ics"))
+        if ci:
+            config = _get_config()
+            init_db(config.effective_db_path)
+            # Check: any token invalid (we cannot re-run checks here without token) - skip; or critical event
+            deadlines = get_next_deadlines(config.effective_db_path, limit=50)
+            for e in deadlines:
+                if e.effective_date and e.event_type in (EventType.SUNSET, EventType.DEPRECATION):
+                    delta = (e.effective_date - datetime.now(timezone.utc)).days
+                    if 0 <= delta <= 30:
+                        typer.echo(f"CI: critical event within 30 days: {e.platform} {e.title}", err=True)
+                        raise typer.Exit(2)
+        if notify:
+            from token_doctor.core.jwt_utils import get_jwt_expiry
+            from token_doctor.core.secrets import get_token
+            config = _get_config()
+            for profile in config.profiles:
+                if not profile.enabled:
+                    continue
+                tok = get_token(profile.platform, config.config_dir)
+                if tok:
+                    exp = get_jwt_expiry(tok)
+                    if exp and (exp - datetime.now(timezone.utc)).days <= 7:
+                        typer.echo(f"ALERT: token {profile.platform} expires within 7 days.")
+            deadlines = get_next_deadlines(config.effective_db_path, limit=5)
+            for e in deadlines:
+                if e.effective_date and e.event_type in (EventType.SUNSET, EventType.DEPRECATION):
+                    delta = (e.effective_date - datetime.now(timezone.utc)).days
+                    if 0 <= delta <= 30:
+                        typer.echo(f"ALERT: {e.platform} - {e.title} (in {delta} days)")
+        return True
+
+    if watch is not None:
+        if watch < 60:
+            typer.echo("--watch must be at least 60 seconds.", err=True)
+            raise typer.Exit(1)
+        while True:
+            run_once()
+            typer.echo(f"Next run in {watch}s...")
+            time.sleep(watch)
+    else:
+        run_once()
 
 
 # --- safe-share ---
@@ -432,7 +697,12 @@ def safe_share(
     init_db(config.effective_db_path)
     plugins = _get_plugins()
     if platform not in plugins:
-        typer.echo(f"Unknown platform: {platform}")
+        available = list_platform_names()
+        suggestion = suggest_platform(platform, available)
+        if suggestion:
+            typer.echo(f"Unknown platform: {platform}. Did you mean: {suggestion}?", err=True)
+        else:
+            typer.echo(f"Unknown platform: {platform}", err=True)
         raise typer.Exit(1)
     meta = get_plugin_metadata(plugins[platform])
     events = get_events(config.effective_db_path, platform=platform)

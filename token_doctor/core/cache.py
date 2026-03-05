@@ -60,6 +60,7 @@ def init_db(db_path: Path) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_events_platform ON events(platform);
             CREATE INDEX IF NOT EXISTS idx_events_effective_date ON events(effective_date);
+            CREATE INDEX IF NOT EXISTS idx_events_platform_effective_date ON events(platform, effective_date);
             CREATE TABLE IF NOT EXISTS fetch_meta (
                 platform TEXT PRIMARY KEY,
                 last_fetch_at TEXT NOT NULL
@@ -164,3 +165,71 @@ def get_last_fetch(db_path: Path, platform: str) -> datetime | None:
         return None
     finally:
         conn.close()
+
+
+def get_event_counts(db_path: Path, platform: str | None = None) -> dict[str, int]:
+    """Return event count per platform. If platform is set, return only that platform."""
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    try:
+        if platform:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM events WHERE platform = ?", (platform,)
+            ).fetchone()
+            return {platform: row[0]} if row else {}
+        cur = conn.execute(
+            "SELECT platform, COUNT(*) FROM events GROUP BY platform"
+        )
+        return dict(cur.fetchall())
+    finally:
+        conn.close()
+
+
+def get_next_deadlines(
+    db_path: Path,
+    platform: str | None = None,
+    limit: int = 10,
+) -> list[NormalizedEvent]:
+    """Return events with effective_date in the future, ordered by effective_date ascending."""
+    import sqlite3
+
+    from token_doctor.core.schema import ConfidenceLevel, EventType
+
+    now = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(db_path)
+    try:
+        q = """
+            SELECT platform, event_type, title, description, url, published_at, effective_date,
+                   confidence, source_type, raw_id, metadata
+            FROM events WHERE effective_date >= ? AND effective_date IS NOT NULL AND effective_date != ''
+        """
+        params: list[object] = [now]
+        if platform:
+            q += " AND platform = ?"
+            params.append(platform)
+        q += " ORDER BY effective_date ASC LIMIT ?"
+        params.append(limit)
+        cur = conn.execute(q, params)
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    out: list[NormalizedEvent] = []
+    for r in rows:
+        out.append(
+            NormalizedEvent(
+                platform=r[0],
+                event_type=EventType(r[1]),
+                title=r[2],
+                description=r[3] or "",
+                url=r[4] or None,
+                published_at=datetime.fromisoformat(r[5]) if r[5] else None,
+                effective_date=datetime.fromisoformat(r[6]) if r[6] else None,
+                confidence=ConfidenceLevel(r[7]),
+                source_type=r[8],
+                raw_id=r[9],
+                metadata=json.loads(r[10]) if r[10] else {},
+            )
+        )
+    return out

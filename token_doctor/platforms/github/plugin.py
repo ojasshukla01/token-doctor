@@ -121,12 +121,16 @@ def _parse_date(entry: Any) -> datetime | None:
     return None
 
 
+# Shorter timeout for public RSS feeds so we don't hang on slow/unresponsive URLs
+FEED_TIMEOUT = 15.0
+
+
 def collect_changes(since: datetime | None) -> list[NormalizedEvent]:
     """Fetch GitHub changelog feeds and return normalized events."""
     events: list[NormalizedEvent] = []
     for feed_url in CHANGELOG_FEEDS:
         try:
-            resp = get(feed_url)
+            resp = get(feed_url, timeout=FEED_TIMEOUT)
             if resp.status_code != 200:
                 continue
             fp = feedparser.parse(resp.content)
