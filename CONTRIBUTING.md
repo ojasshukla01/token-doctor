@@ -31,7 +31,11 @@ When you add a new platform plugin, update **all** of the following so the app a
 - **`README.md`** — Add the platform to the “Supported platforms (50+)” table (token check and changelog/feeds columns).
 - **`docs/sources.md`** — Add a section for the new platform with token validation endpoint(s) and monitored feeds, following the existing format.
 
-### 5. Run checks
+### 5. Interactive TUI (optional)
+
+- **`token_doctor/cli/tui.py`** — The `token-doctor ui` command uses this. If you add a new CLI feature that should appear in the interactive menu, add a corresponding option in `run_tui()` (main menu or submenus). The TUI invokes the same CLI via `CliRunner`, so no duplicate logic.
+
+### 6. Run checks
 
 After making changes:
 
@@ -40,6 +44,8 @@ poetry run pytest tests -v
 poetry run ruff check token_doctor tests
 poetry run mypy token_doctor
 ```
+
+Optional: run `token-doctor ui` and test the new flow from the menu.
 
 If you add a platform but forget to add it to **`PLATFORM_HINTS`**, the test **`test_platform_hints_cover_all_plugins`** will fail and remind you. Use that (and the list above) as a checklist for every new platform or plugin.
 

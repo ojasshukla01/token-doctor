@@ -84,6 +84,15 @@ def main(
     _config_callback(ctx, offline, explain)
 
 
+# --- ui (interactive TUI) ---
+@app.command()
+def ui() -> None:
+    """Launch interactive menu: run all commands (status, profiles, tokens, fetch, report, etc.) from one place."""
+    from token_doctor.cli.tui import run_tui
+
+    run_tui(app)
+
+
 # --- init ---
 @app.command()
 def init(

@@ -48,7 +48,16 @@ token-doctor token set github
 token-doctor token check github
 ```
 
-**Daily use:**
+**Interactive UI (all commands from one menu):**
+
+```bash
+token-doctor ui
+# or: python -m token_doctor.cli.main ui
+```
+
+Then use the numbered menu (dashboard, profiles, tokens, fetch, report, calendar, expiring, doctor run, safe-share). No need to type individual commands.
+
+**Daily use (CLI):**
 
 ```bash
 # Fetch latest changelog/feed data for the platform
@@ -100,6 +109,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues (keycha
 | **`expiring [--days N]`** | List tokens that expire within N days (default 7). |
 | **`doctor run <platform\|all>`** | One-shot: token check, changes fetch, report, calendar. Use `--ci` to exit 2 if critical sunset &lt; 30 days; `--watch N` to run every N seconds; `--notify` to echo alerts. |
 | **`safe-share <platform> [-o PATH]`** | Exports a sanitized diagnostics bundle (no secrets) for sharing or support; path defaults to `token-doctor-safe-share`. |
+| **`ui`** | **Interactive menu** — run all of the above from one place: dashboard, profiles, tokens, fetch, report, calendar, expiring, doctor run, safe-share. One command, then navigate with numbered options. |
 
 **Global flags:**
 
@@ -112,6 +122,13 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues (keycha
 
 - **Python 3.10+** (3.12 recommended)
 - **Poetry** is optional; the lockfile is committed for reproducible installs, but you can use `pip install -e .` and run tests with the same Python.
+
+**Dependencies (see `pyproject.toml`):**
+
+- **Runtime:** typer, click (pinned &lt;8.2 for Typer 0.12 compatibility), httpx, feedparser, keyring, icalendar, pydantic
+- **Optional extras:** `pip install -e ".[rich]"` for Rich tables/panels; `pip install -e ".[scrape]"` for BeautifulSoup scraping
+- **Dev:** pytest, ruff, mypy, pre-commit, respx, detect-secrets (see `[tool.poetry.group.dev.dependencies]`)
+- **Windows:** `poetry.toml` sets in-project venv (`virtualenvs.in-project = true`) to avoid path-length issues with icalendar. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) if install fails.
 
 ---
 
@@ -218,10 +235,11 @@ Tests cover plugin discovery, URL validity, smoke tests for every plugin, and **
 
 ## Documentation
 
-- [SECURITY.md](SECURITY.md) — Threat model, token handling, redaction.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — **We welcome contributions.** How to add plugins, run checks, and submit changes.
+- [SECURITY.md](SECURITY.md) — Threat model, token handling, redaction, and TUI security note.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — **We welcome contributions.** How to add plugins, run checks, TUI updates, and submit changes.
 - [docs/sources.md](docs/sources.md) — Monitored sources per platform.
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — Keychain, "Token invalid", PATH, offline, SSL, and more.
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — Keychain, "Token invalid", PATH, offline, SSL, Windows Poetry/icalendar, token prompt hidden, Typer/Click compatibility.
+- [poetry.toml](poetry.toml) — Poetry config (in-project venv for Windows path length).
 
 ---
 

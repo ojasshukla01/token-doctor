@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
-from typing import TYPE_CHECKING, Any, Iterable, Protocol
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from token_doctor.core.schema import CheckResult, NormalizedEvent

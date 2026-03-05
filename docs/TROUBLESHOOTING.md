@@ -129,6 +129,26 @@ If you use JWTs, run `token-doctor token info <platform>` to see expiry (if pres
 
 ---
 
+## Token prompt: nothing appears when I paste
+
+**Symptom:** You run `token-doctor token set <platform>` and paste your token, but nothing shows in the terminal.
+
+**Cause:** Input is intentionally hidden for security (same as password prompts). The token is still read and stored.
+
+**What to do:** Nothing. After you press Enter, you should see "Token stored." If you want a reminder, the CLI prints: "Paste your token (input is hidden for security)."
+
+---
+
+## TypeError: Parameter.make_metavar() missing 1 required positional argument: 'ctx'
+
+**Symptom:** `token-doctor --help` or any command crashes with the above error.
+
+**Cause:** Typer 0.12 is incompatible with Click 8.2+ (Click changed a method signature).
+
+**What to do:** The project pins Click to &lt;8.2 in `pyproject.toml`. If you upgraded dependencies manually, run `poetry install` again so the lock file is respected, or ensure `click>=8.0,<8.2` in your environment.
+
+---
+
 ## Need more help?
 
 - Open an issue on GitHub with the command you ran, the full error message (redact any secrets), and your OS/Python version.
